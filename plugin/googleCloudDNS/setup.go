@@ -9,8 +9,6 @@ import (
 	"google.golang.org/api/dns/v1"
 )
 
-
-
 func init() {
 	caddy.RegisterPlugin("googleCloudDNS", caddy.Plugin{
 		ServerType: "dns",
@@ -39,10 +37,8 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 	var token
 	var err
 	var flag
-
 	ctx := context.Background()
 	scopes := dns.NdevClouddnsReadonlyScope
-	
 	var fall fall.F
 
 	up := upstream.New()
@@ -85,8 +81,6 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 						return c.Errf("invalid json key '%v'", v)
 					}
 				}
-
-
 			case "upstream":
 				c.RemainingArgs() 
 
@@ -101,9 +95,6 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 			}
 		}
 	}
-
-	
-	
 	/* FindDefaultCredentials looks for credentials in the following places, preferring the first location found:
 
 		1. A JSON file whose path is specified by the
@@ -119,11 +110,7 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 		   (In this final case any provided scopes are ignored.)
 	*/
 
-	
-	
-
 	client, err := f(credentials.JSON) 
-	
 	//something like new of route53
 	h, err := New(ctx, client, keys, up)
 	if err != nil {
