@@ -73,7 +73,7 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 				if len(v) < 1 {
 					return c.Errf("invalid json key '%v'", v)
 				}
-				credentials, err := google.CredentialsFromJSON(ctx, v[0], scopes)
+				credentials, err = google.CredentialsFromJSON(ctx, v[0], scopes)
 				flag = credentials.TokenSource(oauth2.NoContext)
 				token, err = flag.Token()
 				if err != nil{
