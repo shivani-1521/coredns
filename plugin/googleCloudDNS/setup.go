@@ -35,10 +35,14 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 	keyPairs := map[string]struct{}{}
 	keys := map[string][]string{}
 
+	var credentials
+	var token
+	var err
+	flag := 0
+
 	ctx := context.Background()
 	scopes := dns.NdevClouddnsReadonlyScope
 	
-	var providers []oauth2.TokenSource
 	var fall fall.F
 
 	up := upstream.New()
@@ -67,13 +71,24 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 			case "json_key":
 				v := c.RemainingArgs()
 				if len(v) < 1 {
-					return c.Errf("invalid access key '%v'", v)
+					return c.Errf("invalid json key '%v'", v)
 				}
-				credentials, err := CredentialsFromJSON(ctx, v[0], scopes)
-				provider = append(provider, credentials.TokenSource)
+				credentials, err := google.CredentialsFromJSON(ctx, v[0], scopes)
+				flag = credentials.TokenSource(oauth2.NoContext)
+				token, err = flag.Token()
+				if err != nil{
+					//we didn't get token from json so check in env var and other places
+					credentials, err = google.FindDefaultCredentials(ctx, scopes)
+					flag = credentials.TokenSource(oauth2.NoContext)
+					token, err = flag.Token()
+					if err != nil {
+						return c.Errf("invalid json key '%v'", v)
+					}
+				}
+
 
 			case "upstream":
-				c.RemainingArgs() // eats args
+				c.RemainingArgs() 
 
 			case "credentials":
 				credentials.ProjectID = c.Val()
@@ -87,7 +102,8 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 		}
 	}
 
-	credentials, err = FindDefaultCredentials(ctx, scopes)
+	
+	
 	/* FindDefaultCredentials looks for credentials in the following places, preferring the first location found:
 
 		1. A JSON file whose path is specified by the
@@ -103,11 +119,13 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 		   (In this final case any provided scopes are ignored.)
 	*/
 
-	providers = append(providers, credentials.TokenSource)
-
-	//write client 
 	
-	//h, err := New(ctx, client, keys, up)
+	
+
+	client, err := f(credentials.JSON) 
+	
+	//something like new of route53
+	h, err := New(ctx, client, keys, up)
 	if err != nil {
 		return c.Errf("failed to create googleCloudDNS plugin: %v", err)
 	}
