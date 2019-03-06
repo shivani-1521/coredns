@@ -38,7 +38,7 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 	var credentials
 	var token
 	var err
-	flag := 0
+	var flag
 
 	ctx := context.Background()
 	scopes := dns.NdevClouddnsReadonlyScope
