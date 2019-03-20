@@ -9,20 +9,31 @@ import (
 	"google.golang.org/api/dns/v1"
 )
 
+
+type GoogleDNS struct {
+	projectID string
+	dnsClient *dns.Service
+}
+
 func init() {
 	caddy.RegisterPlugin("googleCloudDNS", caddy.Plugin{
 		ServerType: "dns",
 		Action: func(c *caddy.Controller) error {
-			f := func(serviceAccount []byte)  (dns.Service, error){
+			f := func(serviceAccount []byte, projectID string)  (*GoogleDNS, error){
 
 				jwtConfig, err := google.JWTConfigFromJSON(serviceAccount, dns.NdevClouddnsReadonlyScope)
 				if err != nil {
 					return nil, err
 				}
 				ctx := context.Background()
-				jwtHTTPClient := jwtConfig.Client(ctx)
+				ts := jwtConfig.TokenSource(ctx)
+				client := oauth2.NewClient(ctx, ts)
 
-				return dns.New(jwtHTTPClient)
+				d, err := dns.New(client)
+				return &GoogleDNS{
+					projectID : projectID,
+					dnsClient : d,
+				}, nil
 			}
 			return setup(c, f)
 		},
@@ -31,12 +42,9 @@ func init() {
 
 func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, error)) error{
 	keyPairs := map[string]struct{}{}
-	keys := map[string][]string{}
+	keys := map[string][]uint64{}
 
-	var credentials
-	var token
-	var err
-	var flag
+	
 	ctx := context.Background()
 	scopes := dns.NdevClouddnsReadonlyScope
 	var fall fall.F
@@ -69,23 +77,27 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 				if len(v) < 1 {
 					return c.Errf("invalid json key '%v'", v)
 				}
-				credentials, err = google.CredentialsFromJSON(ctx, v[0], scopes)
-				flag = credentials.TokenSource(oauth2.NoContext)
-				token, err = flag.Token()
-				if err != nil{
-					//we didn't get token from json so check in env var and other places
-					credentials, err = google.FindDefaultCredentials(ctx, scopes)
-					flag = credentials.TokenSource(oauth2.NoContext)
-					token, err = flag.Token()
-					if err != nil {
-						return c.Errf("invalid json key '%v'", v)
-					}
+				jsonKey, err := ioutil.ReadFile(v[0])
+				if err != nil {
+					return nil, err
+				}
+
+				var jwt map[string]string
+
+				err = json.Unmarshal(jsonKey, &jwt)
+				if err != nil {
+					return nil, err
+				}
+
+				projectID, ok := jwt["project_id"]
+				if !ok {
+					return nil, fmt.Errorf("Unable to get project_id from jwt")
 				}
 			case "upstream":
 				c.RemainingArgs() 
 
 			case "credentials":
-				credentials.ProjectID = c.Val()
+				projectID = c.Val()
 
 			case "fallthrough":
 				fall.SetZonesFromArgs(c.RemainingArgs())
@@ -95,23 +107,9 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 			}
 		}
 	}
-	/* FindDefaultCredentials looks for credentials in the following places, preferring the first location found:
-
-		1. A JSON file whose path is specified by the
-		   GOOGLE_APPLICATION_CREDENTIALS environment variable.
-		2. A JSON file in a location known to the gcloud command-line tool.
-		   On Windows, this is %APPDATA%/gcloud/application_default_credentials.json.
-		   On other systems, $HOME/.config/gcloud/application_default_credentials.json.
-		3. On Google App Engine standard first generation runtimes (<= Go 1.9) it uses
-		   the appengine.AccessToken function.
-		4. On Google Compute Engine, Google App Engine standard second generation runtimes
-		   (>= Go 1.11), and Google App Engine flexible environment, it fetches
-		   credentials from the metadata server.
-		   (In this final case any provided scopes are ignored.)
-	*/
-
-	client, err := f(credentials.JSON) 
-	//something like new of route53
+	
+	client, err := f(jsonKey, projectID) 
+	
 	h, err := New(ctx, client, keys, up)
 	if err != nil {
 		return c.Errf("failed to create googleCloudDNS plugin: %v", err)
