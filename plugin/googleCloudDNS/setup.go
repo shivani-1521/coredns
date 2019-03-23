@@ -42,7 +42,7 @@ func init() {
 
 func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, error)) error{
 	keyPairs := map[string]struct{}{}
-	keys := map[string][]uint64{}
+	keys := map[string][]string{}
 
 	
 	ctx := context.Background()

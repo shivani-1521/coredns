@@ -40,7 +40,11 @@ func New(ctx context.Context, c *GoogleDNS, keys map[string][]uint64, up *upstre
 	zoneNames := make([]string, 0, len(keys))
 	for dns, hostedZoneIDs := range keys {
 		for _, hostedZoneID := range hostedZoneIDs {
-			// working here
+			z := dns.ManagedZone{
+				DnsName : dns.(string),
+				Id : hostedZoneID.(uint64),
+			}
+			_, err := c.dnsClient.ManagedZone.Get(c.projectID, z).Context(ctx).Do()
 			if err != nil {
 				return nil, err
 			}
@@ -51,7 +55,7 @@ func New(ctx context.Context, c *GoogleDNS, keys map[string][]uint64, up *upstre
 		}
 	}
 	return &GcloudDNS{
-		client:    c,
+		client:    c.dnsClient,
 		zoneNames: zoneNames,
 		zones:     zones,
 		upstream:  up,
