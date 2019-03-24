@@ -19,20 +19,12 @@ func init() {
 	caddy.RegisterPlugin("googleCloudDNS", caddy.Plugin{
 		ServerType: "dns",
 		Action: func(c *caddy.Controller) error {
-			f := func(serviceAccount []byte, projectID string)  (*GoogleDNS, error){
-
-				jwtConfig, err := google.JWTConfigFromJSON(serviceAccount, dns.NdevClouddnsReadonlyScope)
-				if err != nil {
-					return nil, err
-				}
-				ctx := context.Background()
-				ts := jwtConfig.TokenSource(ctx)
-				client := oauth2.NewClient(ctx, ts)
-
-				d, err := dns.New(client)
+			f := func(creds *google.Credentials)  (*GoogleDNS, error){
+				
+				dnsService, err := dns.NewService(ctx, option.WithCredentials(creds), option.WithScopes(scopes))
 				return &GoogleDNS{
-					projectID : projectID,
-					dnsClient : d,
+					projectID : creds.ProjectID,
+					dnsClient : dnsService,
 				}, nil
 			}
 			return setup(c, f)
@@ -40,14 +32,19 @@ func init() {
 	})
 }
 
-func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, error)) error{
+func setup(c *caddy.Controller, f func(creds *google.Credentials) (*GoogleDNS, error)) error{
 	keyPairs := map[string]struct{}{}
-	keys := map[string][]string{}
+	keys := map[string][]uint64{}
 
 	
 	ctx := context.Background()
 	scopes := dns.NdevClouddnsReadonlyScope
 	var fall fall.F
+ 
+	data := ""
+	jsonErr := nil
+	var creds *google.Credentials
+	err := nil
 
 	up := upstream.New()
 	for c.Next() {
@@ -77,27 +74,18 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 				if len(v) < 1 {
 					return c.Errf("invalid json key '%v'", v)
 				}
-				jsonKey, err := ioutil.ReadFile(v[0])
+				data, jsonErr = ioutil.ReadFile(v[0])
+				if jsonErr != nil {
+					return jsonErr
+				}
+				
+				creds, err = google.CredentialsFromJSON(ctx, data, scopes)
 				if err != nil {
-					return nil, err
+				    return err
 				}
 
-				var jwt map[string]string
-
-				err = json.Unmarshal(jsonKey, &jwt)
-				if err != nil {
-					return nil, err
-				}
-
-				projectID, ok := jwt["project_id"]
-				if !ok {
-					return nil, fmt.Errorf("Unable to get project_id from jwt")
-				}
 			case "upstream":
 				c.RemainingArgs() 
-
-			case "credentials":
-				projectID = c.Val()
 
 			case "fallthrough":
 				fall.SetZonesFromArgs(c.RemainingArgs())
@@ -108,7 +96,15 @@ func setup(c *caddy.Controller, f func(serviceAccount []byte) (*dns.Service, err
 		}
 	}
 	
-	client, err := f(jsonKey, projectID) 
+	if data != ""{
+		client, err := f(creds) 
+	} else {
+		creds, err = google.FindDefaultCredentials(ctx , scopes)
+		if err != nil {
+			return err
+		}
+		client, err := f(creds)
+	}
 	
 	h, err := New(ctx, client, keys, up)
 	if err != nil {
