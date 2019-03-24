@@ -20,8 +20,10 @@ func init() {
 		ServerType: "dns",
 		Action: func(c *caddy.Controller) error {
 			f := func(creds *google.Credentials)  (*GoogleDNS, error){
-				
 				dnsService, err := dns.NewService(ctx, option.WithCredentials(creds), option.WithScopes(scopes))
+				if err != nil {
+					return nil,err
+				}
 				return &GoogleDNS{
 					projectID : creds.ProjectID,
 					dnsClient : dnsService,
