@@ -36,9 +36,7 @@ func init() {
 
 func setup(c *caddy.Controller, f func(creds *google.Credentials) (*GoogleDNS, error)) error{
 	keyPairs := map[string]struct{}{}
-	keys := map[string][]uint64{}
-
-	
+	keys := map[string][]uint64{}	
 	ctx := context.Background()
 	scopes := dns.NdevClouddnsReadonlyScope
 	var fall fall.F
@@ -120,7 +118,6 @@ func setup(c *caddy.Controller, f func(creds *google.Credentials) (*GoogleDNS, e
 		h.Next = next
 		return h
 	})
-
 	return nil
 }
 
