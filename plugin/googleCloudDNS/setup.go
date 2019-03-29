@@ -6,13 +6,13 @@ import (
 	//"strings"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/api/dns/v1"
+	googledns "google.golang.org/api/dns/v1"
 )
 
 
 type GoogleDNS struct {
 	projectID string
-	dnsClient *dns.Service
+	dnsClient *googledns.Service
 }
 
 func init() {
@@ -20,7 +20,7 @@ func init() {
 		ServerType: "dns",
 		Action: func(c *caddy.Controller) error {
 			f := func(creds *google.Credentials)  (*GoogleDNS, error){
-				dnsService, err := dns.NewService(ctx, option.WithCredentials(creds), option.WithScopes(scopes))
+				dnsService, err := googledns.NewService(ctx, option.WithCredentials(creds), option.WithScopes(scopes))
 				if err != nil {
 					return nil,err
 				}
@@ -38,7 +38,7 @@ func setup(c *caddy.Controller, f func(creds *google.Credentials) (*GoogleDNS, e
 	keyPairs := map[string]struct{}{}
 	keys := map[string][]uint64{}	
 	ctx := context.Background()
-	scopes := dns.NdevClouddnsReadonlyScope
+	scopes := googledns.NdevClouddnsReadonlyScope
 	var fall fall.F
  
 	data := ""
