@@ -2,15 +2,15 @@ package route53
 
 import (
 	"context"
-	"fmt"
-	"sync"
-	"time"
+	//"fmt"
+	//"sync"
+	//"time"
 
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/file"
 	"github.com/coredns/coredns/plugin/pkg/fall"
 	"github.com/coredns/coredns/plugin/pkg/upstream"
-	"github.com/coredns/coredns/request"
+	//"github.com/coredns/coredns/request"
 	)
 
 type GcloudDNS struct {
@@ -44,10 +44,9 @@ func New(ctx context.Context, c *GoogleDNS, keys map[string][]uint64, up *upstre
 				DnsName : dns.(string),
 				Id : hostedZoneID.(uint64),
 			}
-			_, err := c.dnsClient.ManagedZone.Get(c.projectID, z).Context(ctx).Do()
-			if err != nil {
-				return nil, err
-			}
+			
+			_, err := c.dnsClient.ManagedZones.List(c.projectID).Context(ctx).DnsName(dns).Do()
+
 			if _, ok := zones[dns]; !ok {
 				zoneNames = append(zoneNames, dns)
 			}
