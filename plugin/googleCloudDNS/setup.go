@@ -1,12 +1,19 @@
 package googleCloudDNS
 
 import (
-	"net/http"
 	"context"
-	//"strings"
-	"golang.org/x/oauth2"
+	"strings"
+
+	"github.com/coredns/coredns/core/dnsserver"
+	"github.com/coredns/coredns/plugin"
+	"github.com/coredns/coredns/plugin/pkg/fall"
+	//clog "github.com/coredns/coredns/plugin/pkg/log"
+	"github.com/coredns/coredns/plugin/pkg/upstream"
+
 	"golang.org/x/oauth2/google"
 	googledns "google.golang.org/api/dns/v1"
+
+	"github.com/mholt/caddy"
 )
 
 
@@ -55,8 +62,8 @@ func setup(c *caddy.Controller, f func(creds *google.Credentials) (*GoogleDNS, e
 			if len(parts) != 2 {
 				return c.Errf("invalid zone '%s'", args[i])
 			}
-			dns, hostedZoneID := parts[0], parts[1]
-			if dns == "" || hostedZoneID == "" {
+			dns, managedZoneID := parts[0], parts[1]
+			if dns == "" || managedZoneID == "" {
 				return c.Errf("invalid zone '%s'", args[i])
 			}
 			if _, ok := keyPairs[args[i]]; ok {
@@ -64,7 +71,7 @@ func setup(c *caddy.Controller, f func(creds *google.Credentials) (*GoogleDNS, e
 			}
 
 			keyPairs[args[i]] = struct{}{}
-			keys[dns] = append(keys[dns], hostedZoneID)
+			keys[dns] = append(keys[dns], managedZoneID)
 		}
 
 		for c.NextBlock() {
