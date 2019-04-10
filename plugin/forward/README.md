@@ -21,10 +21,6 @@ connect to a random upstream (which may or may not work).
 
 This plugin can only be used once per Server Block.
 
-How does *forward* relate to *proxy*? This plugin is the "new" version of *proxy* and is faster
-because it re-uses connections to the upstreams. It also does in-band health checks - using DNS
-instead of HTTP. Since it is newer it has a little less (production) mileage on it.
-
 ## Syntax
 
 In its most basic form, a simple forwarder uses this syntax:
@@ -83,6 +79,9 @@ forward FROM TO... {
   but they have to use the same `tls_servername`. E.g. mixing 9.9.9.9 (QuadDNS) with 1.1.1.1
   (Cloudflare) will not work.
 * `policy` specifies the policy to use for selecting upstream servers. The default is `random`.
+  * `random` is a policy that implements random upstream selection.
+  * `round_robin` is a policy that selects hosts based on round robin ordering.
+  * `sequential` is a policy that selects hosts based on sequential ordering.
 * `health_check`, use a different **DURATION** for health checking, the default duration is 0.5s.
 
 Also note the TLS config is "global" for the whole forwarding proxy if you need a different

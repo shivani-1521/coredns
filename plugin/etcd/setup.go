@@ -1,7 +1,6 @@
 package etcd
 
 import (
-	"context"
 	"crypto/tls"
 
 	"github.com/coredns/coredns/core/dnsserver"
@@ -38,12 +37,7 @@ func setup(c *caddy.Controller) error {
 }
 
 func etcdParse(c *caddy.Controller) (*Etcd, error) {
-	etc := Etcd{
-		// Don't default to a proxy for lookups.
-		//		Proxy:      proxy.NewLookup([]string{"8.8.8.8:53", "8.8.4.4:53"}),
-		PathPrefix: "skydns",
-		Ctx:        context.Background(),
-	}
+	etc := Etcd{PathPrefix: "skydns"}
 	var (
 		tlsConfig *tls.Config
 		err       error
@@ -61,56 +55,49 @@ func etcdParse(c *caddy.Controller) (*Etcd, error) {
 			etc.Zones[i] = plugin.Host(str).Normalize()
 		}
 
-		if c.NextBlock() {
-			for {
-				switch c.Val() {
-				case "stubzones":
-					// ignored, remove later.
-				case "fallthrough":
-					etc.Fall.SetZonesFromArgs(c.RemainingArgs())
-				case "debug":
-					/* it is a noop now */
-				case "path":
-					if !c.NextArg() {
-						return &Etcd{}, c.ArgErr()
-					}
-					etc.PathPrefix = c.Val()
-				case "endpoint":
-					args := c.RemainingArgs()
-					if len(args) == 0 {
-						return &Etcd{}, c.ArgErr()
-					}
-					endpoints = args
-				case "upstream":
-					// check args != 0 and error in the future
-					c.RemainingArgs() // clear buffer
-					etc.Upstream = upstream.New()
-				case "tls": // cert key cacertfile
-					args := c.RemainingArgs()
-					tlsConfig, err = mwtls.NewTLSConfigFromArgs(args...)
-					if err != nil {
-						return &Etcd{}, err
-					}
-				case "credentials":
-					args := c.RemainingArgs()
-					if len(args) == 0 {
-						return &Etcd{}, c.ArgErr()
-					}
-					if len(args) != 2 {
-						return &Etcd{}, c.Errf("credentials requires 2 arguments, username and password")
-					}
-					username, password = args[0], args[1]
-				default:
-					if c.Val() != "}" {
-						return &Etcd{}, c.Errf("unknown property '%s'", c.Val())
-					}
+		for c.NextBlock() {
+			switch c.Val() {
+			case "stubzones":
+				// ignored, remove later.
+			case "fallthrough":
+				etc.Fall.SetZonesFromArgs(c.RemainingArgs())
+			case "debug":
+				/* it is a noop now */
+			case "path":
+				if !c.NextArg() {
+					return &Etcd{}, c.ArgErr()
 				}
-
-				if !c.Next() {
-					break
+				etc.PathPrefix = c.Val()
+			case "endpoint":
+				args := c.RemainingArgs()
+				if len(args) == 0 {
+					return &Etcd{}, c.ArgErr()
+				}
+				endpoints = args
+			case "upstream":
+				// check args != 0 and error in the future
+				c.RemainingArgs() // clear buffer
+				etc.Upstream = upstream.New()
+			case "tls": // cert key cacertfile
+				args := c.RemainingArgs()
+				tlsConfig, err = mwtls.NewTLSConfigFromArgs(args...)
+				if err != nil {
+					return &Etcd{}, err
+				}
+			case "credentials":
+				args := c.RemainingArgs()
+				if len(args) == 0 {
+					return &Etcd{}, c.ArgErr()
+				}
+				if len(args) != 2 {
+					return &Etcd{}, c.Errf("credentials requires 2 arguments, username and password")
+				}
+				username, password = args[0], args[1]
+			default:
+				if c.Val() != "}" {
+					return &Etcd{}, c.Errf("unknown property '%s'", c.Val())
 				}
 			}
-
 		}
 		client, err := newEtcdClient(endpoints, tlsConfig, username, password)
 		if err != nil {

@@ -23,7 +23,7 @@ func TestMetricsServer(t *testing.T) {
 }
 
 example.com:0 {
-	proxy . 8.8.4.4:53
+	forward . 8.8.4.4:53
 	prometheus localhost:0
 }
 `
@@ -38,7 +38,7 @@ func TestMetricsRefused(t *testing.T) {
 	metricName := "coredns_dns_response_rcode_count_total"
 
 	corefile := `example.org:0 {
-	proxy . 8.8.8.8:53
+	forward . 8.8.8.8:53
 	prometheus localhost:0
 }
 `
@@ -77,7 +77,8 @@ func TestMetricsAuto(t *testing.T) {
 
 	corefile := `org:0 {
 		auto {
-			directory ` + tmpdir + ` db\.(.*) {1} 1
+			directory ` + tmpdir + ` db\.(.*) {1}
+			reload 1s
 		}
 		prometheus localhost:0
 	}
@@ -184,5 +185,41 @@ google.com:0 {
 	}
 	if endCacheSize-beginCacheSize != 1 {
 		t.Errorf("Expected metric data retrieved for %s, expected %d, got %d", cacheSizeMetricName, 1, endCacheSize-beginCacheSize)
+	}
+}
+
+func TestMetricsPluginEnabled(t *testing.T) {
+	corefile := `example.org:0 {
+	chaos CoreDNS-001 miek@miek.nl
+	prometheus localhost:0
+}
+
+example.com:0 {
+	forward . 8.8.4.4:53
+	prometheus localhost:0
+}
+`
+	srv, err := CoreDNSServer(corefile)
+	if err != nil {
+		t.Fatalf("Could not get CoreDNS serving instance: %s", err)
+	}
+	defer srv.Stop()
+
+	metricName := "coredns_plugin_enabled" //{server, zone, name}
+
+	data := test.Scrape("http://" + metrics.ListenAddr + "/metrics")
+
+	// Get the value for the metrics where the one of the labels values matches "chaos".
+	got, _ := test.MetricValueLabel(metricName, "chaos", data)
+
+	if got != "1" {
+		t.Errorf("Expected value %s for %s, but got %s", "1", metricName, got)
+	}
+
+	// Get the value for the metrics where the one of the labels values matches "whoami".
+	got, _ = test.MetricValueLabel(metricName, "whoami", data)
+
+	if got != "" {
+		t.Errorf("Expected value %s for %s, but got %s", "", metricName, got)
 	}
 }

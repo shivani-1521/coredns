@@ -34,14 +34,12 @@ type (
 		transferTo     []string
 		ReloadInterval time.Duration
 		upstream       *upstream.Upstream // Upstream for looking up names during the resolution process.
-
-		duration time.Duration
 	}
 )
 
 // ServeDNS implements the plugin.Handler interface.
 func (a Auto) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
-	state := request.Request{W: w, Req: r, Context: ctx}
+	state := request.Request{W: w, Req: r}
 	qname := state.Name()
 
 	// Precheck with the origins, i.e. are we allowed to look here?
@@ -66,7 +64,7 @@ func (a Auto) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 		return xfr.ServeDNS(ctx, w, r)
 	}
 
-	answer, ns, extra, result := z.Lookup(state, qname)
+	answer, ns, extra, result := z.Lookup(ctx, state, qname)
 
 	m := new(dns.Msg)
 	m.SetReply(r)
