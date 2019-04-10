@@ -27,6 +27,18 @@ func TestFileParse(t *testing.T) {
 		expectedZones  Zones
 	}{
 		{
+			`file ` + zoneFileName1 + ` miek.nl {
+				transfer from 127.0.0.1
+			}`,
+			true,
+			Zones{},
+		},
+		{
+			`file`,
+			true,
+			Zones{},
+		},
+		{
 			`file ` + zoneFileName1 + ` miek.nl.`,
 			false,
 			Zones{Names: []string{"miek.nl."}},
@@ -48,32 +60,12 @@ func TestFileParse(t *testing.T) {
 			false, // OK for now as we disregard any options for the `upstream`.
 			Zones{Names: []string{"example.net."}},
 		},
-		// errors.
-		{
-			`file ` + zoneFileName1 + ` miek.nl {
-				transfer from 127.0.0.1
-			}`,
-			true,
-			Zones{},
-		},
-		{
-			`file`,
-			true,
-			Zones{},
-		},
-		{
-			`file ` + zoneFileName1 + ` example.net. {
-				no_reload
-			}`,
-			true,
-			Zones{},
-		},
 		{
 			`file ` + zoneFileName1 + ` example.net. {
 				no_rebloat
 			}`,
 			true,
-			Zones{},
+			Zones{Names: []string{}},
 		},
 	}
 

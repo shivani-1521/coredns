@@ -112,6 +112,9 @@ func fileParse(c *caddy.Controller) (Zones, error) {
 				}
 				reload = d
 
+			case "no_reload":
+				reload = 0
+
 			case "upstream":
 				// ignore args, will be error later.
 				c.RemainingArgs() // clear buffer

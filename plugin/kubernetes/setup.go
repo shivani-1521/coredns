@@ -80,6 +80,9 @@ func setup(c *caddy.Controller) error {
 func (k *Kubernetes) RegisterKubeCache(c *caddy.Controller) {
 	c.OnStartup(func() error {
 		go k.APIConn.Run()
+		if k.APIProxy != nil {
+			k.APIProxy.Run()
+		}
 
 		timeout := time.After(5 * time.Second)
 		ticker := time.NewTicker(100 * time.Millisecond)
@@ -96,6 +99,9 @@ func (k *Kubernetes) RegisterKubeCache(c *caddy.Controller) {
 	})
 
 	c.OnShutdown(func() error {
+		if k.APIProxy != nil {
+			k.APIProxy.Stop()
+		}
 		return k.APIConn.Stop()
 	})
 }
@@ -234,18 +240,6 @@ func ParseStanza(c *caddy.Controller) (*Kubernetes, error) {
 				continue
 			}
 			return nil, c.ArgErr()
-		case "namespace_labels":
-			args := c.RemainingArgs()
-			if len(args) > 0 {
-				namespaceLabelSelectorString := strings.Join(args, " ")
-				nls, err := meta.ParseToLabelSelector(namespaceLabelSelectorString)
-				if err != nil {
-					return nil, fmt.Errorf("unable to parse namespace_label selector value: '%v': %v", namespaceLabelSelectorString, err)
-				}
-				k8s.opts.namespaceLabelSelector = nls
-				continue
-			}
-			return nil, c.ArgErr()
 		case "fallthrough":
 			k8s.Fall.SetZonesFromArgs(c.RemainingArgs())
 		case "upstream":
@@ -305,10 +299,6 @@ func ParseStanza(c *caddy.Controller) (*Kubernetes, error) {
 		}
 	}
 
-	if len(k8s.Namespaces) != 0 && k8s.opts.namespaceLabelSelector != nil {
-		return nil, c.Errf("namespaces and namespace_labels cannot both be set")
-	}
-
 	return k8s, nil
 }
 
@@ -321,4 +311,4 @@ func searchFromResolvConf() []string {
 	return rc.Search
 }
 
-const defaultResyncPeriod = 0
+const defaultResyncPeriod = 5 * time.Minute

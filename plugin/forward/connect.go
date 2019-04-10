@@ -103,21 +103,14 @@ func (p *Proxy) Connect(ctx context.Context, state request.Request, opts options
 		return nil, err
 	}
 
-	var ret *dns.Msg
 	conn.SetReadDeadline(time.Now().Add(readTimeout))
-	for {
-		ret, err = conn.ReadMsg()
-		if err != nil {
-			conn.Close() // not giving it back
-			if err == io.EOF && cached {
-				return nil, ErrCachedClosed
-			}
-			return ret, err
+	ret, err := conn.ReadMsg()
+	if err != nil {
+		conn.Close() // not giving it back
+		if err == io.EOF && cached {
+			return nil, ErrCachedClosed
 		}
-		// drop out-of-order responses
-		if state.Req.Id == ret.Id {
-			break
-		}
+		return ret, err
 	}
 
 	p.transport.Yield(conn)

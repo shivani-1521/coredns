@@ -50,6 +50,4 @@ Use the search path dynamically retrieved from the *kubernetes* plugin.
 
 ## Known Issues
 
-In Kubernetes, *autopath* is not compatible with pods running from Windows nodes.
-
-If the server side search ultimately results in a negative answer (e.g. `NXDOMAIN`), then the client will fruitlessly search all paths manually, thus negating the *autopath* optimization.
+Autopath is not compatible with pods running from Windows nodes.

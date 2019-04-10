@@ -74,7 +74,7 @@ func (f *Forward) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	i := 0
 	list := f.List()
 	deadline := time.Now().Add(defaultTimeout)
-	start := time.Now()
+
 	for time.Now().Before(deadline) {
 		if i >= len(list) {
 			// reached the end of list, reset to begin
@@ -126,7 +126,6 @@ func (f *Forward) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		if child != nil {
 			child.Finish()
 		}
-		taperr := toDnstap(ctx, proxy.addr, f, state, ret, start)
 
 		upstreamErr = err
 
@@ -146,14 +145,13 @@ func (f *Forward) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		if !state.Match(ret) {
 			debug.Hexdumpf(ret, "Wrong reply for id: %d, %s %d", ret.Id, state.QName(), state.QType())
 
-			formerr := new(dns.Msg)
-			formerr.SetRcode(state.Req, dns.RcodeFormatError)
+			formerr := state.ErrorMessage(dns.RcodeFormatError)
 			w.WriteMsg(formerr)
-			return 0, taperr
+			return 0, nil
 		}
 
 		w.WriteMsg(ret)
-		return 0, taperr
+		return 0, nil
 	}
 
 	if upstreamErr != nil {

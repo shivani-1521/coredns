@@ -33,9 +33,9 @@ erratic {
 
 In case of a zone transfer and truncate the final SOA record *isn't* added to the response.
 
-## Ready
+## Health
 
-This plugin reports readiness to the ready plugin.
+This plugin implements dynamic health checking. For every dropped query it turns unhealthy.
 
 ## Examples
 

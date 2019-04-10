@@ -7,18 +7,17 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/coredns/coredns)](https://goreportcard.com/report/coredns/coredns)
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/1250/badge)](https://bestpractices.coreinfrastructure.org/projects/1250)
 
-CoreDNS is a DNS server/forwarder, written in Go, that chains [plugins](https://coredns.io/plugins).
-Each plugin performs a (DNS) function.
+CoreDNS (written in Go) chains [plugins](https://coredns.io/plugins). Each plugin performs a DNS
+function.
 
 CoreDNS is a [Cloud Native Computing Foundation](https://cncf.io) graduated project.
 
-CoreDNS is a fast and flexible DNS server. The key word here is *flexible*: with CoreDNS you
+CoreDNS is a fast and flexible DNS server. The keyword here is *flexible*: with CoreDNS you
 are able to do what you want with your DNS data by utilizing plugins. If some functionality is not
 provided out of the box you can add it by [writing a plugin](https://coredns.io/explugins).
 
 CoreDNS can listen for DNS requests coming in over UDP/TCP (go'old DNS), TLS ([RFC
-7858](https://tools.ietf.org/html/rfc7858)), also called DoT, DNS over HTTP/2 - DoH -
-([RFC 8484](https://tools.ietf.org/html/rfc7858)) and [gRPC](https://grpc.io) (not a standard).
+7858](https://tools.ietf.org/html/rfc7858)) and [gRPC](https://grpc.io) (not a standard).
 
 Currently CoreDNS is able to:
 
@@ -28,7 +27,7 @@ Currently CoreDNS is able to:
 * Load balancing of responses (*loadbalance*).
 * Allow for zone transfers, i.e., act as a primary server (*file*).
 * Automatically load zone files from disk (*auto*).
-* Caching of DNS responses (*cache*).
+* Caching (*cache*).
 * Use etcd as a backend (replace [SkyDNS](https://github.com/skynetservices/skydns)) (*etcd*).
 * Use k8s (kubernetes) as a backend (*kubernetes*).
 * Serve as a proxy to forward queries to some other (recursive) nameserver (*forward*).
@@ -47,16 +46,21 @@ out-of-tree plugins.
 
 To compile CoreDNS, we assume you have a working Go setup. See various tutorials if you don’t have that already configured.
 
-First, make sure your golang version is 1.12 or higher as `go mod` support is needed.
-See [here](https://github.com/golang/go/wiki/Modules) for `go mod` details.
-Then, check out the project and run `make` to compile the binary:
+First, make sure your `$GOPATH` is correctly set. See [here](https://github.com/golang/go/wiki/SettingGOPATH) for details. Then, check out the project under your `$GOPATH` and run `make` to compile the binary:
+
 ~~~
+$ mkdir -p $GOPATH/src/github.com/coredns
+$ cd $GOPATH/src/github.com/coredns/
 $ git clone https://github.com/coredns/coredns
 $ cd coredns
 $ make
 ~~~
 
 This should yield a `coredns` binary.
+
+We vendor most ([not all!](https://github.com/coredns/coredns/issues/1523)) packages. This is mostly because vendoring isn't a perfect solution (in
+Go). We don't vendor `mholt/caddy` and `miekg/dns` for instance. Using `make` will pull down these
+dependencies and checks out the correct version as well.
 
 ## Compilation with Docker
 
@@ -65,7 +69,7 @@ a Go environment, you could build CoreDNS easily:
 
 ```
 $ docker run --rm -i -t -v $PWD:/go/src/github.com/coredns/coredns \
-      -w /go/src/github.com/coredns/coredns golang:1.12 make
+      -w /go/src/github.com/coredns/coredns golang:1.11 make
 ```
 
 The above command alone will have `coredns` binary generated.

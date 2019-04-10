@@ -6,7 +6,7 @@ import (
 )
 
 func TestDnstapContext(t *testing.T) {
-	ctx := ContextWithTapper(context.TODO(), Dnstap{})
+	ctx := tapContext{context.TODO(), Dnstap{}}
 	tapper := TapperFromContext(ctx)
 
 	if tapper == nil {

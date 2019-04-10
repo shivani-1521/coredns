@@ -11,7 +11,6 @@ package dnsserver
 // care what plugin above them are doing.
 var Directives = []string{
 	"metadata",
-	"cancel",
 	"tls",
 	"reload",
 	"nsid",
@@ -19,7 +18,6 @@ var Directives = []string{
 	"bind",
 	"debug",
 	"trace",
-	"ready",
 	"health",
 	"pprof",
 	"prometheus",
@@ -44,7 +42,7 @@ var Directives = []string{
 	"etcd",
 	"loop",
 	"forward",
-	"grpc",
+	"proxy",
 	"erratic",
 	"whoami",
 	"on",

@@ -19,8 +19,7 @@ func TestAuto(t *testing.T) {
 
 	corefile := `org:0 {
 		auto {
-			directory ` + tmpdir + ` db\.(.*) {1}
-			reload 1s
+			directory ` + tmpdir + ` db\.(.*) {1} 1
 		}
 	}
 `
@@ -78,8 +77,7 @@ func TestAutoNonExistentZone(t *testing.T) {
 
 	corefile := `.:0 {
 		auto {
-			directory ` + tmpdir + ` (.*) {1}
-			reload 1s
+			directory ` + tmpdir + ` (.*) {1} 1
 		}
 		errors stdout
 	}
@@ -117,8 +115,7 @@ func TestAutoAXFR(t *testing.T) {
 
 	corefile := `org:0 {
 		auto {
-			directory ` + tmpdir + ` db\.(.*) {1}
-			reload 1s
+			directory ` + tmpdir + ` db\.(.*) {1} 1
 			transfer to *
 		}
 	}

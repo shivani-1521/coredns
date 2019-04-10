@@ -26,7 +26,7 @@ const (
 	etcdTimeout = 5 * time.Second
 )
 
-var errKeyNotFound = errors.New("key not found")
+var errKeyNotFound = errors.New("Key not found")
 
 // Etcd is a plugin talks to an etcd cluster.
 type Etcd struct {
@@ -36,13 +36,14 @@ type Etcd struct {
 	PathPrefix string
 	Upstream   *upstream.Upstream
 	Client     *etcdcv3.Client
+	Ctx        context.Context
 
 	endpoints []string // Stored here as well, to aid in testing.
 }
 
 // Services implements the ServiceBackend interface.
-func (e *Etcd) Services(ctx context.Context, state request.Request, exact bool, opt plugin.Options) (services []msg.Service, err error) {
-	services, err = e.Records(ctx, state, exact)
+func (e *Etcd) Services(state request.Request, exact bool, opt plugin.Options) (services []msg.Service, err error) {
+	services, err = e.Records(state, exact)
 	if err != nil {
 		return
 	}
@@ -52,13 +53,13 @@ func (e *Etcd) Services(ctx context.Context, state request.Request, exact bool, 
 }
 
 // Reverse implements the ServiceBackend interface.
-func (e *Etcd) Reverse(ctx context.Context, state request.Request, exact bool, opt plugin.Options) (services []msg.Service, err error) {
-	return e.Services(ctx, state, exact, opt)
+func (e *Etcd) Reverse(state request.Request, exact bool, opt plugin.Options) (services []msg.Service, err error) {
+	return e.Services(state, exact, opt)
 }
 
 // Lookup implements the ServiceBackend interface.
-func (e *Etcd) Lookup(ctx context.Context, state request.Request, name string, typ uint16) (*dns.Msg, error) {
-	return e.Upstream.Lookup(ctx, state, name, typ)
+func (e *Etcd) Lookup(state request.Request, name string, typ uint16) (*dns.Msg, error) {
+	return e.Upstream.Lookup(state, name, typ)
 }
 
 // IsNameError implements the ServiceBackend interface.
@@ -68,11 +69,11 @@ func (e *Etcd) IsNameError(err error) bool {
 
 // Records looks up records in etcd. If exact is true, it will lookup just this
 // name. This is used when find matches when completing SRV lookups for instance.
-func (e *Etcd) Records(ctx context.Context, state request.Request, exact bool) ([]msg.Service, error) {
+func (e *Etcd) Records(state request.Request, exact bool) ([]msg.Service, error) {
 	name := state.Name()
 
 	path, star := msg.PathWithWildcard(name, e.PathPrefix)
-	r, err := e.get(ctx, path, !exact)
+	r, err := e.get(path, !exact)
 	if err != nil {
 		return nil, err
 	}
@@ -80,8 +81,8 @@ func (e *Etcd) Records(ctx context.Context, state request.Request, exact bool) (
 	return e.loopNodes(r.Kvs, segments, star, state.QType())
 }
 
-func (e *Etcd) get(ctx context.Context, path string, recursive bool) (*etcdcv3.GetResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, etcdTimeout)
+func (e *Etcd) get(path string, recursive bool) (*etcdcv3.GetResponse, error) {
+	ctx, cancel := context.WithTimeout(e.Ctx, etcdTimeout)
 	defer cancel()
 	if recursive == true {
 		if !strings.HasSuffix(path, "/") {

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/coredns/coredns/core/dnsserver"
@@ -49,7 +50,7 @@ func setup(c *caddy.Controller) error {
 		}
 
 		go func() {
-			ticker := time.NewTicker(a.loader.ReloadInterval)
+			ticker := time.NewTicker(a.loader.duration)
 			for {
 				select {
 				case <-walkChan:
@@ -82,6 +83,7 @@ func autoParse(c *caddy.Controller) (Auto, error) {
 			template:       "${1}",
 			re:             regexp.MustCompile(`db\.(.*)`),
 			ReloadInterval: nilInterval,
+			duration:       nilInterval,
 		},
 		Zones: &Zones{},
 	}
@@ -103,7 +105,7 @@ func autoParse(c *caddy.Controller) (Auto, error) {
 
 		for c.NextBlock() {
 			switch c.Val() {
-			case "directory": // directory DIR [REGEXP TEMPLATE]
+			case "directory": // directory DIR [REGEXP [TEMPLATE] [DURATION]]
 				if !c.NextArg() {
 					return a, c.ArgErr()
 				}
@@ -136,8 +138,17 @@ func autoParse(c *caddy.Controller) (Auto, error) {
 					a.loader.template = rewriteToExpand(c.Val())
 				}
 
+				// duration
 				if c.NextArg() {
-					return Auto{}, c.ArgErr()
+					i, err := strconv.Atoi(c.Val())
+					if err != nil {
+						return a, err
+					}
+					if i < 1 {
+						i = 1
+					}
+					log.Warning("TIMEOUT of directory is deprecated. Use RELOAD instead. See https://coredns.io/plugins/auto/#syntax")
+					a.loader.duration = time.Duration(i) * time.Second
 				}
 
 			case "reload":
@@ -147,11 +158,14 @@ func autoParse(c *caddy.Controller) (Auto, error) {
 				}
 				a.loader.ReloadInterval = d
 
+			case "no_reload":
+				a.loader.ReloadInterval = 0
+
 			case "upstream":
 				c.RemainingArgs() // eat remaining args
 				a.loader.upstream = upstream.New()
 
-			case "transfer":
+			default:
 				t, _, e := parse.Transfer(c, false)
 				if e != nil {
 					return a, e
@@ -159,15 +173,17 @@ func autoParse(c *caddy.Controller) (Auto, error) {
 				if t != nil {
 					a.loader.transferTo = append(a.loader.transferTo, t...)
 				}
-
-			default:
-				return Auto{}, c.Errf("unknown property '%s'", c.Val())
 			}
 		}
 	}
 
 	if a.loader.ReloadInterval == nilInterval {
-		a.loader.ReloadInterval = 60 * time.Second
+		if a.loader.duration == nilInterval {
+			a.loader.duration = 60 * time.Second
+		}
+		a.loader.ReloadInterval = a.loader.duration
+	} else if a.loader.duration == nilInterval {
+		a.loader.duration = a.loader.ReloadInterval
 	}
 
 	return a, nil

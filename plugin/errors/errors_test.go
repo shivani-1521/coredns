@@ -8,7 +8,6 @@ import (
 	golog "log"
 	"math/rand"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,7 +24,7 @@ import (
 func TestErrors(t *testing.T) {
 	buf := bytes.Buffer{}
 	golog.SetOutput(&buf)
-	em := errorHandler{}
+	em := errorHandler{eLogger: errorLogger}
 
 	testErr := errors.New("test error")
 	tests := []struct {
@@ -73,22 +72,58 @@ func TestErrors(t *testing.T) {
 	}
 }
 
-func TestLogPattern(t *testing.T) {
+func TestConsLogger(t *testing.T) {
 	buf := bytes.Buffer{}
 	golog.SetOutput(&buf)
 
+	consLogger(5, "^Error.*!$", 3*time.Second)
+
+	exp := "[ERROR] plugin/errors: 5 errors like '^Error.*!$' occurred in last 3s"
+	act := buf.String()
+	if !strings.Contains(act, exp) {
+		t.Errorf("Unexpected log message, expected to contain %q, actual %q", exp, act)
+	}
+}
+
+func TestLogPattern(t *testing.T) {
 	h := &errorHandler{
 		patterns: []*pattern{{
 			count:   4,
 			period:  2 * time.Second,
-			pattern: regexp.MustCompile("^error.*!$"),
+			pattern: regexp.MustCompile("^Error.*!$"),
 		}},
+		cLogger: testConsLogger,
 	}
-	h.logPattern(0)
+	loggedData = loggedData[:0]
 
-	expLog := "4 errors like '^error.*!$' occurred in last 2s"
-	if log := buf.String(); !strings.Contains(log, expLog) {
-		t.Errorf("Expected log %q, but got %q", expLog, log)
+	h.logPattern(0)
+	expLen := 1
+	if len(loggedData) != expLen {
+		t.Errorf("Unexpected number of logged messages, expected %d, actual %d",
+			expLen, len(loggedData))
+	}
+	expCnt := uint32(4)
+	if loggedData[0].cnt != expCnt {
+		t.Errorf("Unexpected 'count' in logged message, expected %d, actual %d",
+			expCnt, loggedData[0].cnt)
+	}
+	expPat := "^Error.*!$"
+	actPat := loggedData[0].pat
+	if actPat != expPat {
+		t.Errorf("Unexpected 'pattern' in logged message, expected %s, actual %s",
+			expPat, actPat)
+	}
+	expPer := "2s"
+	actPer := loggedData[0].dur.String()
+	if actPer != expPer {
+		t.Errorf("Unexpected 'period' in logged message, expected %s, actual %s",
+			expPer, actPer)
+	}
+
+	h.logPattern(0)
+	if len(loggedData) != expLen {
+		t.Errorf("Unexpected number of logged messages, expected %d, actual %d",
+			expLen, len(loggedData))
 	}
 }
 
@@ -97,8 +132,9 @@ func TestInc(t *testing.T) {
 		stopFlag: 1,
 		patterns: []*pattern{{
 			period:  2 * time.Second,
-			pattern: regexp.MustCompile("^error.*!$"),
+			pattern: regexp.MustCompile("^Error.*!$"),
 		}},
+		cLogger: testConsLogger,
 	}
 
 	ret := h.inc(0)
@@ -150,15 +186,14 @@ func TestInc(t *testing.T) {
 }
 
 func TestStop(t *testing.T) {
-	buf := bytes.Buffer{}
-	golog.SetOutput(&buf)
-
 	h := &errorHandler{
 		patterns: []*pattern{{
 			period:  2 * time.Second,
-			pattern: regexp.MustCompile("^error.*!$"),
+			pattern: regexp.MustCompile("^Error.*!$"),
 		}},
+		cLogger: testConsLogger,
 	}
+	loggedData = loggedData[:0]
 
 	h.inc(0)
 	h.inc(0)
@@ -190,33 +225,53 @@ func TestStop(t *testing.T) {
 		t.Error("Timer was unexpectedly not stopped before")
 	}
 
-	expLog := "3 errors like '^error.*!$' occurred in last 2s"
-	if log := buf.String(); !strings.Contains(log, expLog) {
-		t.Errorf("Expected log %q, but got %q", expLog, log)
+	expLen := 1
+	if len(loggedData) != expLen {
+		t.Errorf("Unexpected number of logged messages, expected %d, actual %d",
+			expLen, len(loggedData))
+	}
+	expCnt = uint32(3)
+	actCnt = loggedData[0].cnt
+	if actCnt != expCnt {
+		t.Errorf("Unexpected 'count' in logged message, expected %d, actual %d",
+			expCnt, actCnt)
 	}
 }
 
-const (
-	pattern0 = "failed"
-	pattern1 = "down$"
-)
-
 func TestServeDNSConcurrent(t *testing.T) {
-	buf := bytes.NewBuffer(nil)
-	golog.SetOutput(buf)
-
 	eg := newErrorGenerator()
+	rep := &errorReport{}
 
 	h := &errorHandler{
 		patterns: []*pattern{
 			{
 				period:  3 * time.Nanosecond,
-				pattern: regexp.MustCompile(pattern0),
+				pattern: regexp.MustCompile("Failed"),
 			},
 			{
 				period:  2 * time.Nanosecond,
-				pattern: regexp.MustCompile(pattern1),
+				pattern: regexp.MustCompile("down$"),
 			},
+		},
+		cLogger: func(cnt uint32, pattern string, p time.Duration) {
+			rep.incLoggerCnt()
+			if pattern == "Failed" {
+				rep.incConsolidated(Err0, cnt)
+			} else if pattern == "down$" {
+				rep.incConsolidated(Err1, cnt)
+			}
+		},
+		eLogger: func(code int, n, t, e string) {
+			switch e {
+			case ErrStr0:
+				rep.incPassed(Err0)
+			case ErrStr1:
+				rep.incPassed(Err1)
+			case ErrStr2:
+				rep.incPassed(Err2)
+			case ErrStr3:
+				rep.incPassed(Err3)
+			}
 		},
 		Next: eg,
 	}
@@ -229,19 +284,20 @@ func TestServeDNSConcurrent(t *testing.T) {
 	runnersCnt := 9
 	runner := func() {
 		defer wg.Done()
-		for eg.progress() < 100 {
+		for !eg.done() {
 			h.ServeDNS(ctx, w, r)
 		}
 	}
-
 	wg.Add(runnersCnt)
 	for ; runnersCnt > 0; runnersCnt-- {
 		go runner()
 	}
 
 	stopCalled := false
-	for eg.progress() < 100 {
-		if !stopCalled && eg.progress() > 50 {
+	for !eg.done() {
+		if !stopCalled &&
+			atomic.LoadUint32(&rep.s[Err0]) > ErrCnt0/2 &&
+			atomic.LoadUint32(&rep.s[Err1]) > ErrCnt1/2 {
 			h.stop()
 			stopCalled = true
 		}
@@ -254,30 +310,43 @@ func TestServeDNSConcurrent(t *testing.T) {
 	wg.Wait()
 	time.Sleep(time.Millisecond)
 
-	rep := makeReport(t, buf)
+	if rep.loggerCnt() < 3 {
+		t.Errorf("Perhaps logger was never called by timer")
+	}
+	if rep.consolidated(Err0) == 0 {
+		t.Errorf("Err0 was never reported by consLogger")
+	}
+	if rep.consolidated(Err1) == 0 {
+		t.Errorf("Err1 was never reported by consLogger")
+	}
+	if rep.consolidated(Err0)+rep.passed(Err0) != ErrCnt0 {
+		t.Errorf("Unexpected Err0 count, expected %d, reported by consLogger %d and by ServeDNS %d",
+			ErrCnt0, rep.consolidated(Err0), rep.passed(Err0))
+	}
+	if rep.consolidated(Err1)+rep.passed(Err1) != ErrCnt1 {
+		t.Errorf("Unexpected Err1 count, expected %d, reported by consLogger %d and by ServeDNS %d",
+			ErrCnt1, rep.consolidated(Err1), rep.passed(Err1))
+	}
+	if rep.passed(Err2) != ErrCnt2 {
+		t.Errorf("Unexpected Err2 count, expected %d, reported by ServeDNS %d",
+			ErrCnt2, rep.passed(Err2))
+	}
+	if rep.passed(Err3) != ErrCnt3 {
+		t.Errorf("Unexpected Err3 count, expected %d, reported by ServeDNS %d",
+			ErrCnt3, rep.passed(Err3))
+	}
+}
 
-	if rep.c[Err0] == 0 {
-		t.Errorf("Err0 was never consolidated")
-	}
-	if rep.c[Err1] == 0 {
-		t.Errorf("Err1 was never consolidated")
-	}
-	if rep.c[Err0]+rep.r[Err0] != ErrCnt0 {
-		t.Errorf("Unexpected Err0 count, expected %d, consolidated %d and reported %d",
-			ErrCnt0, rep.c[Err0], rep.r[Err0])
-	}
-	if rep.c[Err1]+rep.r[Err1] != ErrCnt1 {
-		t.Errorf("Unexpected Err1 count, expected %d, consolidated %d and reported %d",
-			ErrCnt1, rep.c[Err1], rep.r[Err1])
-	}
-	if rep.r[Err2] != ErrCnt2 {
-		t.Errorf("Unexpected Err2 count, expected %d, reported %d",
-			ErrCnt2, rep.r[Err2])
-	}
-	if rep.r[Err3] != ErrCnt3 {
-		t.Errorf("Unexpected Err3 count, expected %d, reported %d",
-			ErrCnt3, rep.r[Err3])
-	}
+type logData struct {
+	cnt uint32
+	pat string
+	dur time.Duration
+}
+
+var loggedData []logData
+
+func testConsLogger(cnt uint32, pattern string, p time.Duration) {
+	loggedData = append(loggedData, logData{cnt, pattern, p})
 }
 
 // error generator
@@ -287,10 +356,10 @@ const (
 	Err2
 	Err3
 
-	ErrStr0 = "failed to connect"
-	ErrStr1 = "upstream is down"
-	ErrStr2 = "access denied"
-	ErrStr3 = "yet another error"
+	ErrStr0 = "Failed to connect"
+	ErrStr1 = "Upstream is down"
+	ErrStr2 = "Access denied"
+	ErrStr3 = "Yet another error"
 
 	ErrCnt0 = 120000
 	ErrCnt1 = 130000
@@ -305,8 +374,7 @@ type errorBunch struct {
 
 type errorGenerator struct {
 	errors   [4]errorBunch
-	totalCnt int32
-	totalLim int32
+	doneFlag uint32
 }
 
 func newErrorGenerator() *errorGenerator {
@@ -319,13 +387,11 @@ func newErrorGenerator() *errorGenerator {
 			{ErrCnt2, fmt.Errorf(ErrStr2)},
 			{ErrCnt3, fmt.Errorf(ErrStr3)},
 		},
-		totalLim: ErrCnt0 + ErrCnt1 + ErrCnt2 + ErrCnt3,
 	}
 }
 
-// returns progress as a value from [0..100] range
-func (sh *errorGenerator) progress() int32 {
-	return atomic.LoadInt32(&sh.totalCnt) * 100 / sh.totalLim
+func (sh *errorGenerator) done() bool {
+	return atomic.LoadUint32(&sh.doneFlag) > 0
 }
 
 func (sh *errorGenerator) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
@@ -333,11 +399,11 @@ func (sh *errorGenerator) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 	for c := 0; c < 4; c++ {
 		errInd := (i + c) & 3
 		if atomic.AddInt32(&sh.errors[errInd].cnt, -1) >= 0 {
-			atomic.AddInt32(&sh.totalCnt, 1)
 			return 0, sh.errors[errInd].err
 		}
 		atomic.AddInt32(&sh.errors[errInd].cnt, 1)
 	}
+	atomic.StoreUint32(&sh.doneFlag, 1)
 	return 0, nil
 }
 
@@ -345,39 +411,33 @@ func (sh *errorGenerator) Name() string { return "errorGenerator" }
 
 // error report
 type errorReport struct {
-	c [4]uint32
-	r [4]uint32
+	s [4]uint32
+	p [4]uint32
+	l uint32
 }
 
-func makeReport(t *testing.T, b *bytes.Buffer) errorReport {
-	logDump := b.String()
-	r := errorReport{}
+func (er *errorReport) consolidated(i int) uint32 {
+	return atomic.LoadUint32(&er.s[i])
+}
 
-	re := regexp.MustCompile(`(\d+) errors like '(.*)' occurred`)
-	m := re.FindAllStringSubmatch(logDump, -1)
-	for _, sub := range m {
-		ind := 0
-		switch sub[2] {
-		case pattern0:
-			ind = Err0
-		case pattern1:
-			ind = Err1
-		default:
-			t.Fatalf("Unknown pattern found in log: %s", sub[0])
-		}
-		n, err := strconv.ParseUint(sub[1], 10, 32)
-		if err != nil {
-			t.Fatalf("Invalid number found in log: %s", sub[0])
-		}
-		r.c[ind] += uint32(n)
-	}
-	t.Logf("%d consolidated messages found", len(m))
+func (er *errorReport) incConsolidated(i int, cnt uint32) {
+	atomic.AddUint32(&er.s[i], cnt)
+}
 
-	r.r[Err0] = uint32(strings.Count(logDump, ErrStr0))
-	r.r[Err1] = uint32(strings.Count(logDump, ErrStr1))
-	r.r[Err2] = uint32(strings.Count(logDump, ErrStr2))
-	r.r[Err3] = uint32(strings.Count(logDump, ErrStr3))
-	return r
+func (er *errorReport) passed(i int) uint32 {
+	return atomic.LoadUint32(&er.p[i])
+}
+
+func (er *errorReport) incPassed(i int) {
+	atomic.AddUint32(&er.p[i], 1)
+}
+
+func (er *errorReport) loggerCnt() uint32 {
+	return atomic.LoadUint32(&er.l)
+}
+
+func (er *errorReport) incLoggerCnt() {
+	atomic.AddUint32(&er.l, 1)
 }
 
 func genErrorHandler(rcode int, err error) plugin.Handler {

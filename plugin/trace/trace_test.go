@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/pkg/dnstest"
 	"github.com/coredns/coredns/plugin/pkg/rcode"
 	"github.com/coredns/coredns/plugin/test"
@@ -68,7 +69,7 @@ func TestTrace(t *testing.T) {
 				every:  1,
 				tracer: m,
 			}
-			ctx := context.TODO()
+			ctx := context.WithValue(context.TODO(), plugin.ServerCtx{}, server)
 			if _, err := tr.ServeDNS(ctx, w, tc.question); err != nil {
 				t.Fatalf("Error during tr.ServeDNS(ctx, w, %v): %v", tc.question, err)
 			}
