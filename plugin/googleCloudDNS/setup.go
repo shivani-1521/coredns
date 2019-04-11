@@ -3,6 +3,7 @@ package googleCloudDNS
 import (
 	"context"
 	"strings"
+	"strconv"
 
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
@@ -12,6 +13,8 @@ import (
 
 	"golang.org/x/oauth2/google"
 	googledns "google.golang.org/api/dns/v1"
+	"google.golang.org/api/option"
+	"io/ioutil"
 
 	"github.com/mholt/caddy"
 )
@@ -22,11 +25,14 @@ type GoogleDNS struct {
 	dnsClient *googledns.Service
 }
 
+const scopes = googledns.NdevClouddnsReadonlyScope
+
 func init() {
 	caddy.RegisterPlugin("googleCloudDNS", caddy.Plugin{
 		ServerType: "dns",
 		Action: func(c *caddy.Controller) error {
 			f := func(creds *google.Credentials)  (*GoogleDNS, error){
+				ctx := context.Background()
 				dnsService, err := googledns.NewService(ctx, option.WithCredentials(creds), option.WithScopes(scopes))
 				if err != nil {
 					return nil,err
@@ -44,14 +50,13 @@ func init() {
 func setup(c *caddy.Controller, f func(creds *google.Credentials) (*GoogleDNS, error)) error{
 	keyPairs := map[string]struct{}{}
 	keys := map[string][]uint64{}	
-	ctx := context.Background()
-	scopes := googledns.NdevClouddnsReadonlyScope
+	
 	var fall fall.F
  
-	data := ""
-	jsonErr := nil
+	var data []byte
 	var creds *google.Credentials
-	err := nil
+	var client *GoogleDNS
+	var err, jsonErr error
 
 	up := upstream.New()
 	for c.Next() {
@@ -62,8 +67,9 @@ func setup(c *caddy.Controller, f func(creds *google.Credentials) (*GoogleDNS, e
 			if len(parts) != 2 {
 				return c.Errf("invalid zone '%s'", args[i])
 			}
-			dns, managedZoneID := parts[0], parts[1]
-			if dns == "" || managedZoneID == "" {
+			dns, managedZoneid := parts[0], parts[1]
+			managedZoneID, err := strconv.ParseUint(managedZoneid, 10, 64)
+			if dns == "" || managedZoneID == 0 {
 				return c.Errf("invalid zone '%s'", args[i])
 			}
 			if _, ok := keyPairs[args[i]]; ok {
@@ -85,7 +91,7 @@ func setup(c *caddy.Controller, f func(creds *google.Credentials) (*GoogleDNS, e
 				if jsonErr != nil {
 					return jsonErr
 				}
-				
+				ctx := context.Background()
 				creds, err = google.CredentialsFromJSON(ctx, data, scopes)
 				if err != nil {
 				    return err
@@ -103,16 +109,18 @@ func setup(c *caddy.Controller, f func(creds *google.Credentials) (*GoogleDNS, e
 		}
 	}
 	
-	if data != ""{
-		client, err := f(creds) 
+	if data != nil{
+		client, err = f(creds) 
 	} else {
+		ctx := context.Background()
 		creds, err = google.FindDefaultCredentials(ctx , scopes)
 		if err != nil {
 			return err
 		}
-		client, err := f(creds)
+		client, err = f(creds)
 	}
 	
+	ctx := context.Background()
 	h, err := New(ctx, client, keys, up)
 	if err != nil {
 		return c.Errf("failed to create googleCloudDNS plugin: %v", err)
@@ -127,4 +135,3 @@ func setup(c *caddy.Controller, f func(creds *google.Credentials) (*GoogleDNS, e
 	})
 	return nil
 }
-
