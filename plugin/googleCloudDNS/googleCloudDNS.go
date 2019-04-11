@@ -11,8 +11,9 @@ import (
 	"github.com/coredns/coredns/plugin/pkg/fall"
 	"github.com/coredns/coredns/plugin/pkg/upstream"
 	"github.com/coredns/coredns/request"
+	"github.com/coredns/coredns/plugin/pkg/log"
 
-	"golang.org/x/oauth2/google"
+	//"golang.org/x/oauth2/google"
 	googledns "google.golang.org/api/dns/v1"
 	"github.com/miekg/dns"
 	)
@@ -22,7 +23,7 @@ type GcloudDNS struct {
 	Fall fall.F
 
 	zoneNames []string
-	client    GoogleDNS
+	client    *GoogleDNS
 	upstream  *upstream.Upstream
 
 	zMu   sync.RWMutex
@@ -30,21 +31,23 @@ type GcloudDNS struct {
 }
 
 type zone struct {
-	id  string
+	id  uint64
 	z   *file.Zone
 	dns string
 }
 
 type zones map[string][]*zone
 
+func (h *GcloudDNS) Name() string { return "googleCloudDNS" }
+
 func New(ctx context.Context, c *GoogleDNS, keys map[string][]uint64, up *upstream.Upstream) (*GcloudDNS, error) {
 	zones := make(map[string][]*zone, len(keys))
 	zoneNames := make([]string, 0, len(keys))
 	for dns, managedZoneIDs := range keys {
 		for _, managedZoneID := range managedZoneIDs {
-			z := dns.ManagedZone{
-				DnsName : dns.(string),
-				Id : managedZoneID.(uint64),
+			z := googledns.ManagedZone{
+				DnsName : dns,
+				Id : managedZoneID,
 			}
 			
 			_, err := c.dnsClient.ManagedZones.List(c.projectID).Context(ctx).DnsName(dns).Do()
@@ -152,7 +155,7 @@ func (h *GcloudDNS) updateZones(ctx context.Context) error {
 				newZ := file.NewZone(zName, "")
 				newZ.Upstream = h.upstream
 				
-				err = h.client.dnsClient.ResourceRecordSetsService.List(client.projectID, managedZone).Pages(ctx,
+				err = h.client.dnsClient.ResourceRecordSets.List(h.client.projectID, managedZone.dns).Pages(ctx,
 					func(out *googledns.ResourceRecordSetsListResponse) error {
 						for _, rrs := range out.Rrsets {
 							if err := updateZoneFromRRS(rrs, newZ); err != nil {
@@ -186,4 +189,3 @@ func (h *GcloudDNS) updateZones(ctx context.Context) error {
 	return nil
 }
 
-func (h *GoogleDNS) Name() string { return "googleCloudDNS" }
