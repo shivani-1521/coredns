@@ -105,7 +105,8 @@ func (h *GcloudDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.M
 	var result file.Result
 	for _, managedZone := range z {
 		h.zMu.RLock()
-		m.Answer, m.Ns, m.Extra, result = managedZone.z.Lookup(state, qname)
+		ctx := context.Background()
+		m.Answer, m.Ns, m.Extra, result = managedZone.z.Lookup(ctx, state, qname)
 		h.zMu.RUnlock()
 		if len(m.Answer) != 0 {
 			break
